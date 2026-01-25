@@ -1,7 +1,48 @@
 import os
 import httpx
+from functools import wraps
+from time import time
+from typing import Any, Callable
 
 BASE_URL = "https://www.alphavantage.co/query"
+
+# Simple in-memory cache with TTL
+_cache: dict[str, tuple[Any, float]] = {}
+
+
+def cached(ttl_seconds: int) -> Callable:
+    """Decorator to cache async function results with TTL.
+
+    Args:
+        ttl_seconds: Time-to-live for cache entries in seconds
+
+    Example:
+        @cached(ttl_seconds=60)
+        async def get_quote(symbol: str) -> dict:
+            ...
+    """
+
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        async def wrapper(*args, **kwargs) -> Any:
+            cache_key = f"{func.__name__}:{args}:{kwargs}"
+
+            if cache_key in _cache:
+                cached_value, expiry_time = _cache[cache_key]
+                if time() < expiry_time:
+                    return cached_value
+                else:
+                    del _cache[cache_key]
+
+            # Call the actual function
+            result = await func(*args, **kwargs)
+
+            _cache[cache_key] = (result, time() + ttl_seconds)
+            return result
+
+        return wrapper
+
+    return decorator
 
 
 class APIError(Exception):
@@ -56,7 +97,13 @@ def _check_api_response(data: dict, require_key: str = None) -> dict:
     return data
 
 
+@cached(ttl_seconds=60)
 async def get_quote(symbol: str) -> dict:
+    """Get current stock price (cached 60 seconds - updates during market hours).
+
+    In production: Would use Redis for distributed cache, with TTL adjusted
+    based on market hours (shorter during trading, longer after-hours).
+    """
     api_key = _get_api_key()
     params = {"function": "GLOBAL_QUOTE", "symbol": symbol, "apikey": api_key}
     data = await _fetch_json(params)
@@ -74,8 +121,14 @@ async def get_quote(symbol: str) -> dict:
     }
 
 
+@cached(ttl_seconds=3600)
 async def get_historical_data(symbol: str, days: int = 30) -> dict:
-    """Fetch historical daily price data for a symbol.
+    """Fetch historical daily price data for a symbol (cached 1 hour).
+
+    Cached longer than quotes because historical data only changes after market close.
+
+    In production: Would invalidate cache at market close via event system,
+    then immediately re-fetch to serve fresh data.
 
     Args:
         symbol: Stock symbol (e.g., 'AAPL')
@@ -103,8 +156,14 @@ async def get_historical_data(symbol: str, days: int = 30) -> dict:
     return {"symbol": symbol, "data": history}
 
 
+@cached(ttl_seconds=86400)
 async def search_symbols(query: str) -> dict:
-    """Search for stock symbols by company name or partial symbol.
+    """Search for stock symbols by company name or partial symbol (cached 24 hours).
+
+    Cached longest because company names and symbols rarely change.
+
+    In production: Precompute and cache all popular searches, fallback to
+    Redis with very high TTL (days/weeks) for unpopular queries.
 
     Args:
         query: Search term (company name or symbol prefix)

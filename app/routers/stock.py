@@ -1,10 +1,12 @@
 from fastapi import APIRouter, HTTPException, Query
+from time import time
 
 from app.services.alphavantage import (
     get_quote as av_get_quote,
     get_historical_data as av_get_historical_data,
     search_symbols as av_search_symbols,
     APIError,
+    _cache,
 )
 
 router = APIRouter()
@@ -49,3 +51,23 @@ async def search(q: str = Query(..., min_length=1, max_length=100)):
         q: Search query (company name or symbol)
     """
     return await _call_service(av_search_symbols(q))
+
+
+@router.get("/api/cache/stats")
+async def cache_stats():
+    """Debug endpoint to inspect cache state.
+
+    Shows current cached items with their expiry times.
+    Useful for understanding cache behavior during development.
+    """
+    current_time = time()
+    stats = {"total_entries": len(_cache), "entries": {}}
+
+    for key, (value, expiry_time) in _cache.items():
+        time_remaining = max(0, expiry_time - current_time)
+        stats["entries"][key] = {
+            "expires_in_seconds": round(time_remaining, 2),
+            "expired": time_remaining <= 0,
+        }
+
+    return stats
