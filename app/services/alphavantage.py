@@ -1,10 +1,23 @@
 import os
 import httpx
+from dataclasses import dataclass
 from functools import wraps
 from time import time
-from typing import Any, Callable
+from typing import Any, Callable, Union
 
 BASE_URL = "https://www.alphavantage.co/query"
+
+
+@dataclass
+class Success:
+    data: dict
+
+
+@dataclass
+class Failure:
+    status_code: int
+    message: str
+
 
 # Simple in-memory cache with TTL
 _cache: dict[str, tuple[Any, float]] = {}
@@ -73,17 +86,19 @@ def _get_api_key() -> str:
     return api_key
 
 
-async def _fetch_json(params: dict) -> dict:
-    """Fetch and parse JSON from API, handling network errors."""
+async def _fetch_json(params: dict) -> Union[Success, Failure]:
+    """Fetch and parse JSON from API, returning result or failure."""
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(BASE_URL, params=params)
-            resp.raise_for_status()
-            return resp.json()
-    except httpx.HTTPStatusError as e:
-        raise APIError(502, f"API returned status {e.response.status_code}")
+            if not resp.is_success:
+                return Failure(
+                    status_code=resp.status_code,
+                    message=f"API returned status {resp.status_code}",
+                )
+            return Success(data=resp.json())
     except (httpx.ConnectError, httpx.TimeoutException, httpx.RequestError):
-        raise APIError(503, "Failed to reach AlphaVantage API")
+        return Failure(status_code=503, message="Failed to reach AlphaVantage API")
 
 
 def _check_api_response(data: dict, require_key: str = None) -> dict:
@@ -106,7 +121,10 @@ async def get_quote(symbol: str) -> dict:
     """
     api_key = _get_api_key()
     params = {"function": "GLOBAL_QUOTE", "symbol": symbol, "apikey": api_key}
-    data = await _fetch_json(params)
+    result = await _fetch_json(params)
+    if isinstance(result, Failure):
+        raise APIError(result.status_code, result.message)
+    data = result.data
     _check_api_response(data, "Global Quote")
 
     quote = data["Global Quote"]
@@ -139,7 +157,10 @@ async def get_historical_data(symbol: str, days: int = 30) -> dict:
     """
     api_key = _get_api_key()
     params = {"function": "TIME_SERIES_DAILY", "symbol": symbol, "apikey": api_key}
-    data = await _fetch_json(params)
+    result = await _fetch_json(params)
+    if isinstance(result, Failure):
+        raise APIError(result.status_code, result.message)
+    data = result.data
     _check_api_response(data, "Time Series (Daily)")
 
     time_series = data["Time Series (Daily)"]
@@ -173,7 +194,10 @@ async def search_symbols(query: str) -> dict:
     """
     api_key = _get_api_key()
     params = {"function": "SYMBOL_SEARCH", "keywords": query, "apikey": api_key}
-    data = await _fetch_json(params)
+    result = await _fetch_json(params)
+    if isinstance(result, Failure):
+        raise APIError(result.status_code, result.message)
+    data = result.data
     _check_api_response(data)
 
     matches = data.get("bestMatches") or []
