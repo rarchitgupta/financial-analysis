@@ -96,17 +96,19 @@ async def _fetch_json(params: dict) -> Union[Success, Failure]:
                     status_code=resp.status_code,
                     message=f"API returned status {resp.status_code}",
                 )
-            return Success(data=resp.json())
+            data = resp.json()
+            # Check for API errors in the response body (e.g., "Error Message", "Note")
+            if "Note" in data:
+                return Failure(status_code=429, message=data["Note"])
+            if "Error Message" in data:
+                return Failure(status_code=400, message=data["Error Message"])
+            return Success(data=data)
     except (httpx.ConnectError, httpx.TimeoutException, httpx.RequestError):
         return Failure(status_code=503, message="Failed to reach AlphaVantage API")
 
 
 def _check_api_response(data: dict, require_key: str = None) -> dict:
-    """Validate API response for errors."""
-    if "Note" in data:
-        raise APIError(429, "AlphaVantage rate limit reached")
-    if "Error Message" in data:
-        raise APIError(404, "Invalid symbol")
+    """Validate API response has required data."""
     if require_key and not (data.get(require_key) or {}):
         raise APIError(404, "No data found in response")
     return data
