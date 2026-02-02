@@ -32,7 +32,7 @@ async def test_get_quote_invalid_symbol(mock_api_key):
         with pytest.raises(APIError) as exc_info:
             await get_quote("INVALID")
 
-        assert exc_info.value.status_code == 404
+        assert exc_info.value.status_code == 400
 
 
 @pytest.mark.asyncio

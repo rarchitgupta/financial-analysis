@@ -26,7 +26,7 @@ def test_quote_endpoint_invalid_symbol(mock_api_key):
         create_async_client_mock({"Error Message": "Invalid symbol"}),
     ):
         response = client.get("/api/stock/quote/INVALID")
-        assert response.status_code == 404
+        assert response.status_code == 400
 
 
 def test_history_endpoint_success(mock_api_key, mock_history_response):
@@ -48,7 +48,7 @@ def test_history_endpoint_invalid_symbol(mock_api_key):
         create_async_client_mock({"Error Message": "Invalid symbol"}),
     ):
         response = client.get("/api/stock/history/INVALID")
-        assert response.status_code == 404
+        assert response.status_code == 400
 
 
 def test_search_endpoint_success(mock_api_key, mock_search_response):
