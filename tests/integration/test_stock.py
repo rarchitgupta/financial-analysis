@@ -1,11 +1,8 @@
-"""Integration tests for FastAPI endpoints."""
-
 from unittest.mock import patch, AsyncMock, MagicMock
 from fastapi.testclient import TestClient
 
 
 def _create_async_client_mock(response_data):
-    """Helper to mock httpx.AsyncClient for API calls."""
     mock_response = MagicMock()
     mock_response.json.return_value = response_data
     mock_response.raise_for_status.return_value = None
@@ -19,14 +16,17 @@ def _create_async_client_mock(response_data):
     return mock_client
 
 
+def test_quote_requires_auth(client_unauthenticated: TestClient):
+    response = client_unauthenticated.get("/api/stock/quote/AAPL")
+    assert response.status_code == 401
+
+
 def test_quote_endpoint_success(client: TestClient, mock_api_key, mock_quote_response):
-    """Test getting a stock quote successfully."""
     with patch(
         "app.services.alphavantage.httpx.AsyncClient",
         _create_async_client_mock(mock_quote_response),
     ):
         response = client.get("/api/stock/quote/AAPL")
-
         assert response.status_code == 200
         data = response.json()
         assert data["symbol"] == "AAPL"
@@ -34,7 +34,6 @@ def test_quote_endpoint_success(client: TestClient, mock_api_key, mock_quote_res
 
 
 def test_quote_endpoint_invalid_symbol(client: TestClient, mock_api_key):
-    """Test error handling for invalid symbol."""
     with patch(
         "app.services.alphavantage.httpx.AsyncClient",
         _create_async_client_mock({"Error Message": "Invalid symbol"}),
@@ -43,16 +42,19 @@ def test_quote_endpoint_invalid_symbol(client: TestClient, mock_api_key):
         assert response.status_code == 400
 
 
+def test_history_requires_auth(client_unauthenticated: TestClient):
+    response = client_unauthenticated.get("/api/stock/history/AAPL?days=2")
+    assert response.status_code == 401
+
+
 def test_history_endpoint_success(
     client: TestClient, mock_api_key, mock_history_response
 ):
-    """Test getting historical data successfully."""
     with patch(
         "app.services.alphavantage.httpx.AsyncClient",
         _create_async_client_mock(mock_history_response),
     ):
         response = client.get("/api/stock/history/AAPL?days=2")
-
         assert response.status_code == 200
         data = response.json()
         assert data["symbol"] == "AAPL"
@@ -60,7 +62,6 @@ def test_history_endpoint_success(
 
 
 def test_history_endpoint_invalid_symbol(client: TestClient, mock_api_key):
-    """Test error handling for historical data."""
     with patch(
         "app.services.alphavantage.httpx.AsyncClient",
         _create_async_client_mock({"Error Message": "Invalid symbol"}),
@@ -69,16 +70,19 @@ def test_history_endpoint_invalid_symbol(client: TestClient, mock_api_key):
         assert response.status_code == 400
 
 
+def test_search_requires_auth(client_unauthenticated: TestClient):
+    response = client_unauthenticated.get("/api/stock/search?q=apple")
+    assert response.status_code == 401
+
+
 def test_search_endpoint_success(
     client: TestClient, mock_api_key, mock_search_response
 ):
-    """Test searching for symbols successfully."""
     with patch(
         "app.services.alphavantage.httpx.AsyncClient",
         _create_async_client_mock(mock_search_response),
     ):
         response = client.get("/api/stock/search?q=apple")
-
         assert response.status_code == 200
         data = response.json()
         assert data["query"] == "apple"
@@ -86,7 +90,6 @@ def test_search_endpoint_success(
 
 
 def test_search_endpoint_no_results(client: TestClient, mock_api_key):
-    """Test search with no results."""
     with patch(
         "app.services.alphavantage.httpx.AsyncClient",
         _create_async_client_mock({"bestMatches": []}),

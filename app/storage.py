@@ -1,5 +1,3 @@
-"""Database storage operations for stock data."""
-
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -9,7 +7,6 @@ from app.models import StockQuote, StockHistoryEntry
 async def save_quote(
     session: AsyncSession, symbol: str, price: float, timestamp: str
 ) -> StockQuote:
-    # Update existing or create new
     stmt = select(StockQuote).where(StockQuote.symbol == symbol)
     result = await session.execute(stmt)
     quote = result.scalar_one_or_none()

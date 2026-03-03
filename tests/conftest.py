@@ -1,5 +1,7 @@
 import os
 import pytest
+import uuid
+import asyncio
 from unittest.mock import patch
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import (
@@ -12,19 +14,12 @@ from sqlmodel import SQLModel
 from sqlmodel.pool import StaticPool
 
 from app.main import app
-from app.db import get_session
-
-
-# ============================================================================
-# Database Fixtures
-# ============================================================================
+from app.db import User, get_session
+from app.users import current_active_user
 
 
 @pytest.fixture
 def test_engine_sync():
-    """Create an in-memory async SQLite engine for testing (sync fixture)."""
-    import asyncio
-
     async def _create_engine():
         engine: AsyncEngine = create_async_engine(
             "sqlite+aiosqlite:///:memory:",
@@ -35,20 +30,17 @@ def test_engine_sync():
             await conn.run_sync(SQLModel.metadata.create_all)
         return engine
 
-    # Create engine in event loop
     loop = asyncio.new_event_loop()
     engine = loop.run_until_complete(_create_engine())
 
     yield engine
 
-    # Cleanup
     loop.run_until_complete(engine.dispose())
     loop.close()
 
 
 @pytest.fixture
 async def test_session(test_engine_sync):
-    """Provide a fresh async session for each test."""
     async_session_local = async_sessionmaker(
         test_engine_sync,
         class_=AsyncSession,
@@ -61,26 +53,62 @@ async def test_session(test_engine_sync):
 
 @pytest.fixture
 def session_mock():
-    """Simple mock session for unit tests that don't use real database."""
     from unittest.mock import AsyncMock
 
-    # Clear global cache before test
     from app.services import alphavantage
 
     alphavantage._cache.clear()
 
     yield AsyncMock()
 
-    # Clear global cache after test
     alphavantage._cache.clear()
 
 
 @pytest.fixture
-def client(test_engine_sync):
-    """Provide a TestClient with database dependency override."""
+def test_user():
+    user = User(
+        id=uuid.uuid4(),
+        email="test@example.com",
+        hashed_password="hashed",
+        is_active=True,
+        is_superuser=False,
+    )
+    return user
+
+
+@pytest.fixture
+def client(test_engine_sync, test_user):
     from app.services import alphavantage
 
-    # Clear global cache before test
+    alphavantage._cache.clear()
+
+    async_session_local = async_sessionmaker(
+        test_engine_sync,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+    async def get_test_session():
+        async with async_session_local() as session:
+            yield session
+
+    def get_test_user():
+        return test_user
+
+    app.dependency_overrides[get_session] = get_test_session
+    app.dependency_overrides[current_active_user] = get_test_user
+
+    test_client = TestClient(app)
+    yield test_client
+
+    app.dependency_overrides.clear()
+    alphavantage._cache.clear()
+
+
+@pytest.fixture
+def client_unauthenticated(test_engine_sync):
+    from app.services import alphavantage
+
     alphavantage._cache.clear()
 
     async_session_local = async_sessionmaker(
@@ -99,14 +127,7 @@ def client(test_engine_sync):
     yield test_client
 
     app.dependency_overrides.clear()
-
-    # Clear global cache after test
     alphavantage._cache.clear()
-
-
-# ============================================================================
-# API Response Mocks
-# ============================================================================
 
 
 @pytest.fixture

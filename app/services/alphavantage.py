@@ -21,7 +21,7 @@ class Failure:
     message: str
 
 
-_cache: dict = {}  # Legacy: No longer used for caching. Kept for test fixture compatibility only.
+_cache: dict = {}
 
 
 class APIError(Exception):

@@ -1,5 +1,3 @@
-"""Unit tests for alphavantage service."""
-
 import pytest
 from unittest.mock import patch, AsyncMock, MagicMock
 
@@ -12,7 +10,6 @@ from app.services.alphavantage import (
 
 
 def _create_async_client_mock(response_data):
-    """Helper to mock httpx.AsyncClient for API calls."""
     mock_response = MagicMock()
     mock_response.json.return_value = response_data
     mock_response.raise_for_status.return_value = None
@@ -27,7 +24,7 @@ def _create_async_client_mock(response_data):
 
 
 @pytest.mark.asyncio
-async def test_get_quote_success(mock_api_key, mock_quote_response, session_mock):
+async def test_get_quote_success(mock_quote_response, session_mock):
     with (
         patch(
             "app.services.alphavantage.httpx.AsyncClient",
@@ -48,7 +45,7 @@ async def test_get_quote_success(mock_api_key, mock_quote_response, session_mock
 
 
 @pytest.mark.asyncio
-async def test_get_quote_invalid_symbol(mock_api_key, session_mock):
+async def test_get_quote_invalid_symbol(session_mock):
     with (
         patch(
             "app.services.alphavantage.httpx.AsyncClient",
@@ -67,9 +64,7 @@ async def test_get_quote_invalid_symbol(mock_api_key, session_mock):
 
 
 @pytest.mark.asyncio
-async def test_get_historical_data_success(
-    mock_api_key, mock_history_response, session_mock
-):
+async def test_get_historical_data_success(mock_history_response, session_mock):
     with (
         patch(
             "app.services.alphavantage.httpx.AsyncClient",
@@ -93,7 +88,7 @@ async def test_get_historical_data_success(
 
 
 @pytest.mark.asyncio
-async def test_search_symbols_success(mock_api_key, mock_search_response):
+async def test_search_symbols_success(mock_search_response):
     with patch(
         "app.services.alphavantage.httpx.AsyncClient",
         _create_async_client_mock(mock_search_response),
@@ -107,7 +102,7 @@ async def test_search_symbols_success(mock_api_key, mock_search_response):
 
 
 @pytest.mark.asyncio
-async def test_search_symbols_no_results(mock_api_key):
+async def test_search_symbols_no_results():
     with patch(
         "app.services.alphavantage.httpx.AsyncClient",
         _create_async_client_mock({"bestMatches": []}),
