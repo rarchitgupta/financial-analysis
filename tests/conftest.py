@@ -1,6 +1,133 @@
 import os
 import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
+import uuid
+import asyncio
+from unittest.mock import patch
+from fastapi.testclient import TestClient
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    AsyncEngine,
+    create_async_engine,
+    async_sessionmaker,
+)
+from sqlmodel import SQLModel
+from sqlmodel.pool import StaticPool
+
+from app.main import app
+from app.db import User, get_session
+from app.users import current_active_user
+
+
+@pytest.fixture
+def test_engine_sync():
+    async def _create_engine():
+        engine: AsyncEngine = create_async_engine(
+            "sqlite+aiosqlite:///:memory:",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        async with engine.begin() as conn:
+            await conn.run_sync(SQLModel.metadata.create_all)
+        return engine
+
+    loop = asyncio.new_event_loop()
+    engine = loop.run_until_complete(_create_engine())
+
+    yield engine
+
+    loop.run_until_complete(engine.dispose())
+    loop.close()
+
+
+@pytest.fixture
+async def test_session(test_engine_sync):
+    async_session_local = async_sessionmaker(
+        test_engine_sync,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+    async with async_session_local() as session:
+        yield session
+
+
+@pytest.fixture
+def session_mock():
+    from unittest.mock import AsyncMock
+
+    from app.services import alphavantage
+
+    alphavantage._cache.clear()
+
+    yield AsyncMock()
+
+    alphavantage._cache.clear()
+
+
+@pytest.fixture
+def test_user():
+    user = User(
+        id=uuid.uuid4(),
+        email="test@example.com",
+        hashed_password="hashed",
+        is_active=True,
+        is_superuser=False,
+    )
+    return user
+
+
+@pytest.fixture
+def client(test_engine_sync, test_user):
+    from app.services import alphavantage
+
+    alphavantage._cache.clear()
+
+    async_session_local = async_sessionmaker(
+        test_engine_sync,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+    async def get_test_session():
+        async with async_session_local() as session:
+            yield session
+
+    def get_test_user():
+        return test_user
+
+    app.dependency_overrides[get_session] = get_test_session
+    app.dependency_overrides[current_active_user] = get_test_user
+
+    test_client = TestClient(app)
+    yield test_client
+
+    app.dependency_overrides.clear()
+    alphavantage._cache.clear()
+
+
+@pytest.fixture
+def client_unauthenticated(test_engine_sync):
+    from app.services import alphavantage
+
+    alphavantage._cache.clear()
+
+    async_session_local = async_sessionmaker(
+        test_engine_sync,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+    async def get_test_session():
+        async with async_session_local() as session:
+            yield session
+
+    app.dependency_overrides[get_session] = get_test_session
+
+    test_client = TestClient(app)
+    yield test_client
+
+    app.dependency_overrides.clear()
+    alphavantage._cache.clear()
 
 
 @pytest.fixture
@@ -58,24 +185,3 @@ def mock_search_response():
             },
         ]
     }
-
-
-def create_async_client_mock(response_data):
-    """Helper to create a properly mocked AsyncClient context manager."""
-    mock_response = MagicMock()
-    mock_response.json.return_value = response_data
-    mock_response.raise_for_status.return_value = None
-
-    mock_client = MagicMock()
-    mock_client.return_value.__aenter__.return_value.get = AsyncMock(
-        return_value=mock_response
-    )
-    mock_client.return_value.__aexit__.return_value = None
-
-    return mock_client
-
-
-@pytest.fixture
-def mock_http_client(mock_api_key):
-    with patch("app.services.alphavantage.httpx.AsyncClient") as mock_client:
-        yield mock_client
