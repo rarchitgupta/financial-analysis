@@ -27,6 +27,10 @@ def _create_async_client_mock(response_data):
 async def test_get_quote_success(mock_quote_response, session_mock):
     with (
         patch(
+            "app.services.alphavantage._get_api_key",
+            return_value="test_key",
+        ),
+        patch(
             "app.services.alphavantage.httpx.AsyncClient",
             _create_async_client_mock(mock_quote_response),
         ),
@@ -48,6 +52,10 @@ async def test_get_quote_success(mock_quote_response, session_mock):
 async def test_get_quote_invalid_symbol(session_mock):
     with (
         patch(
+            "app.services.alphavantage._get_api_key",
+            return_value="test_key",
+        ),
+        patch(
             "app.services.alphavantage.httpx.AsyncClient",
             _create_async_client_mock({"Error Message": "Invalid symbol"}),
         ),
@@ -66,6 +74,10 @@ async def test_get_quote_invalid_symbol(session_mock):
 @pytest.mark.asyncio
 async def test_get_historical_data_success(mock_history_response, session_mock):
     with (
+        patch(
+            "app.services.alphavantage._get_api_key",
+            return_value="test_key",
+        ),
         patch(
             "app.services.alphavantage.httpx.AsyncClient",
             _create_async_client_mock(mock_history_response),
@@ -89,9 +101,15 @@ async def test_get_historical_data_success(mock_history_response, session_mock):
 
 @pytest.mark.asyncio
 async def test_search_symbols_success(mock_search_response):
-    with patch(
-        "app.services.alphavantage.httpx.AsyncClient",
-        _create_async_client_mock(mock_search_response),
+    with (
+        patch(
+            "app.services.alphavantage._get_api_key",
+            return_value="test_key",
+        ),
+        patch(
+            "app.services.alphavantage.httpx.AsyncClient",
+            _create_async_client_mock(mock_search_response),
+        ),
     ):
         result = await search_symbols("apple")
 
@@ -103,9 +121,15 @@ async def test_search_symbols_success(mock_search_response):
 
 @pytest.mark.asyncio
 async def test_search_symbols_no_results():
-    with patch(
-        "app.services.alphavantage.httpx.AsyncClient",
-        _create_async_client_mock({"bestMatches": []}),
+    with (
+        patch(
+            "app.services.alphavantage._get_api_key",
+            return_value="test_key",
+        ),
+        patch(
+            "app.services.alphavantage.httpx.AsyncClient",
+            _create_async_client_mock({"bestMatches": []}),
+        ),
     ):
         with pytest.raises(APIError) as exc_info:
             await search_symbols("xyzunknown")
