@@ -1,3 +1,3 @@
-from app.routers import auth, holdings, stock
+from app.routers import analysis, auth, holdings, stock
 
-__all__ = ["auth", "holdings", "stock"]
+__all__ = ["analysis", "auth", "holdings", "stock"]

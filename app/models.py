@@ -37,5 +37,8 @@ class Holding(SQLModel, table=True):
 
 
 def is_fresh(created_at: datetime, ttl_seconds: int) -> bool:
+    # Ensure created_at is timezone-aware
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=timezone.utc)
     age_seconds = (datetime.now(timezone.utc) - created_at).total_seconds()
     return age_seconds < ttl_seconds
